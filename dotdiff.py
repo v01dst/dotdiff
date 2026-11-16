@@ -149,3 +149,35 @@ def read_file(path):
             return handle.read()
     except OSError as error:
         raise DotenvError("%s: %s" % (path, error.strerror or error)) from error
+
+
+def compare(left, right):
+    """Compare two parsed files and return the differences between them."""
+    added = []
+    removed = []
+    changed = []
+    unchanged = []
+    for key, entry in right.items():
+        previous = left.get(key)
+        if previous is None:
+            added.append(entry)
+        elif previous.value != entry.value:
+            changed.append((previous, entry))
+        else:
+            unchanged.append(key)
+    for key, entry in left.items():
+        if key not in right:
+            removed.append(entry)
+    return {
+        "added": added,
+        "removed": removed,
+        "changed": changed,
+        "unchanged": unchanged,
+    }
+
+
+def is_identical(differences):
+    """True when two parsed files hold the same variables."""
+    return not (
+        differences["added"] or differences["removed"] or differences["changed"]
+    )
