@@ -1,5 +1,6 @@
 """Read dotenv files and compare two of them."""
 
+import json
 import sys
 
 EXIT_SAME = 0
@@ -181,3 +182,93 @@ def is_identical(differences):
     return not (
         differences["added"] or differences["removed"] or differences["changed"]
     )
+
+
+def _one_line(value):
+    return value.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+
+
+def build_result(left_name, right_name, left, right, mask=False, keys_only=False):
+    """Turn the difference between two files into a result that can be shown."""
+    differences = compare(left, right)
+
+    def shown(value):
+        if keys_only:
+            return None
+        if mask:
+            return "***"
+        return value
+
+    added = [{"key": entry.key, "value": shown(entry.value)} for entry in differences["added"]]
+    removed = [
+        {"key": entry.key, "value": shown(entry.value)}
+        for entry in differences["removed"]
+    ]
+    changed = [
+        {
+            "key": before.key,
+            "left": shown(before.value),
+            "right": shown(after.value),
+        }
+        for before, after in differences["changed"]
+    ]
+    return {
+        "left": left_name,
+        "right": right_name,
+        "identical": is_identical(differences),
+        "added": added,
+        "removed": removed,
+        "changed": changed,
+        "unchanged": list(differences["unchanged"]),
+    }
+
+
+def render_text(result, keys_only=False):
+    """Turn a result into the lines that are printed on the terminal."""
+    added = result["added"]
+    removed = result["removed"]
+    changed = result["changed"]
+    total = len(added) + len(removed) + len(changed)
+    if result["identical"]:
+        return "No differences between %s and %s" % (result["left"], result["right"])
+    header = "%d change%s between %s and %s" % (
+        total,
+        "" if total == 1 else "s",
+        result["left"],
+        result["right"],
+    )
+    lines = [header, ""]
+    for entry in added:
+        lines.append(_line_added(entry, keys_only))
+    for entry in changed:
+        lines.append(_line_changed(entry, keys_only))
+    for entry in removed:
+        lines.append(_line_removed(entry, keys_only))
+    return "\n".join(lines)
+
+
+def _line_added(entry, keys_only):
+    if keys_only:
+        return "+ %s" % entry["key"]
+    return "+ %s=%s" % (entry["key"], _one_line(entry["value"]))
+
+
+def _line_changed(entry, keys_only):
+    if keys_only:
+        return "~ %s" % entry["key"]
+    return "~ %s=%s -> %s" % (
+        entry["key"],
+        _one_line(entry["left"]),
+        _one_line(entry["right"]),
+    )
+
+
+def _line_removed(entry, keys_only):
+    if keys_only:
+        return "- %s" % entry["key"]
+    return "- %s=%s" % (entry["key"], _one_line(entry["value"]))
+
+
+def render_json(result):
+    """Turn a result into JSON."""
+    return json.dumps(result, indent=2)
