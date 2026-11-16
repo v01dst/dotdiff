@@ -1,5 +1,6 @@
 """Read dotenv files and compare two of them."""
 
+import argparse
 import json
 import sys
 
@@ -272,3 +273,69 @@ def _line_removed(entry, keys_only):
 def render_json(result):
     """Turn a result into JSON."""
     return json.dumps(result, indent=2)
+
+
+def build_parser():
+    """Build the argument parser of the command line tool."""
+    parser = argparse.ArgumentParser(
+        prog="dotdiff",
+        description="Compare two dotenv files and see what changed.",
+    )
+    parser.add_argument("left", help="the first file, or - for the standard input")
+    parser.add_argument("right", help="the second file")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="as_json",
+        help="print the result as JSON",
+    )
+    parser.add_argument(
+        "--mask",
+        action="store_true",
+        help="replace every value with ***",
+    )
+    parser.add_argument(
+        "--keys",
+        action="store_true",
+        dest="keys_only",
+        help="print key names only, no values",
+    )
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="print nothing, use the exit code",
+    )
+    return parser
+
+
+def main(argv=None):
+    """Run the command line tool and return its exit code."""
+    parser = build_parser()
+    arguments = parser.parse_args(argv)
+    try:
+        left_text = read_file(arguments.left)
+        right_text = read_file(arguments.right)
+        left = parse(left_text, arguments.left)
+        right = parse(right_text, arguments.right)
+    except DotenvError as error:
+        print("dotdiff: %s" % error, file=sys.stderr)
+        return EXIT_ERROR
+    result = build_result(
+        arguments.left,
+        arguments.right,
+        left,
+        right,
+        mask=arguments.mask,
+        keys_only=arguments.keys_only,
+    )
+    if not arguments.quiet:
+        if arguments.as_json:
+            print(render_json(result))
+        else:
+            print(render_text(result, keys_only=arguments.keys_only))
+    return EXIT_SAME if result["identical"] else EXIT_DIFFERENT
+
+
+if __name__ == "__main__":
+    sys.exit(main())
